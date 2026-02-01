@@ -1,34 +1,18 @@
-/**
- * Create Experiment Page
- */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card, Form, Input, InputNumber, Select, Checkbox, Button, Row, Col, message, Spin } from 'antd';
 import { experimentsAPI, agentsAPI } from '../api/client';
-import { Loader } from 'lucide-react';
+
+const { TextArea } = Input;
 
 function CreateExperiment() {
     const navigate = useNavigate();
+    const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
+    const [dataLoading, setDataLoading] = useState(true);
     const [strategies, setStrategies] = useState([]);
     const [models, setModels] = useState({ providers: [] });
-
-    const [formData, setFormData] = useState({
-        experiment_name: '',
-        description: '',
-        target_role: {
-            name: '',
-            description: '',
-            persona: '',
-            constraints: '',
-            knowledge_domain: ''
-        },
-        attack_strategies: ['role_drift'],
-        target_llm_provider: 'groq',
-        target_model: 'llama-3.3-70b-versatile',
-        num_turns: 10,
-        temperature: 0.7,
-        max_tokens: 1024
-    });
+    const [selectedProvider, setSelectedProvider] = useState('groq');
 
     useEffect(() => {
         loadData();
@@ -42,250 +26,217 @@ function CreateExperiment() {
             ]);
             setStrategies(strategiesData);
             setModels(modelsData);
+            setDataLoading(false);
         } catch (error) {
+            message.error('Failed to load data');
             console.error('Error loading data:', error);
+            setDataLoading(false);
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (values) => {
         setLoading(true);
 
         try {
-            // Prepare config
             const config = {
-                ...formData,
+                experiment_name: values.experiment_name,
+                description: values.description,
                 target_role: {
-                    ...formData.target_role,
-                    constraints: formData.target_role.constraints
-                        .split('\n')
-                        .filter(c => c.trim())
-                }
+                    name: values.role_name,
+                    description: values.role_description,
+                    persona: values.persona,
+                    constraints: values.constraints.split('\n').filter(c => c.trim()),
+                    knowledge_domain: values.knowledge_domain
+                },
+                attack_strategies: values.attack_strategies || ['role_drift'],
+                target_llm_provider: values.target_llm_provider,
+                target_model: values.target_model,
+                num_turns: values.num_turns,
+                temperature: values.temperature,
+                max_tokens: 1024
             };
 
             const result = await experimentsAPI.create(config, true);
+            message.success('Experiment created and started!');
             navigate(`/experiments/${result.experiment_id}`);
         } catch (error) {
             console.error('Error creating experiment:', error);
-            alert('Failed to create experiment: ' + error.message);
+            message.error('Failed to create experiment: ' + error.message);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        if (name.startsWith('target_role.')) {
-            const field = name.split('.')[1];
-            setFormData(prev => ({
-                ...prev,
-                target_role: { ...prev.target_role, [field]: value }
-            }));
-        } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
-        }
-    };
+    if (dataLoading) {
+        return (
+            <div style={{ textAlign: 'center', padding: '100px' }}>
+                <Spin size="large" />
+            </div>
+        );
+    }
 
-    const toggleStrategy = (strategyKey) => {
-        setFormData(prev => ({
-            ...prev,
-            attack_strategies: prev.attack_strategies.includes(strategyKey)
-                ? prev.attack_strategies.filter(s => s !== strategyKey)
-                : [...prev.attack_strategies, strategyKey]
-        }));
-    };
+    const providerModels = models.providers.find(p => p.name === selectedProvider)?.models || [];
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold mb-6">Create New Experiment</h1>
+        <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>
+                Create New Experiment
+            </h1>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <Form
+                form={form}
+                layout="vertical"
+                onFinish={handleSubmit}
+                initialValues={{
+                    num_turns: 10,
+                    temperature: 0.7,
+                    target_llm_provider: 'groq',
+                    target_model: 'llama-3.3-70b-versatile',
+                    attack_strategies: ['role_drift']
+                }}
+            >
                 {/* Basic Info */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                    <h2 className="text-xl font-semibold mb-4">Experiment Information</h2>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Experiment Name</label>
-                            <input
-                                type="text"
+                <Card title="Experiment Information" style={{ marginBottom: 24 }}>
+                    <Row gutter={16}>
+                        <Col span={24}>
+                            <Form.Item
+                                label="Experiment Name"
                                 name="experiment_name"
-                                value={formData.experiment_name}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border rounded-md"
-                                placeholder="e.g., customer_support_stress_test"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Description</label>
-                            <textarea
-                                name="description"
-                                value={formData.description}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border rounded-md"
-                                rows="3"
-                                placeholder="Optional description of the experiment"
-                            />
-                        </div>
-                    </div>
-                </div>
+                                rules={[{ required: true, message: 'Please enter experiment name' }]}
+                            >
+                                <Input placeholder="e.g., customer_support_stress_test" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item label="Description" name="description">
+                                <TextArea rows={3} placeholder="Optional description of the experiment" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Card>
 
                 {/* Target Role */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                    <h2 className="text-xl font-semibold mb-4">Target Agent Role</h2>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Role Name</label>
-                            <input
-                                type="text"
-                                name="target_role.name"
-                                value={formData.target_role.name}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border rounded-md"
-                                placeholder="e.g., Customer Support Agent"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Description</label>
-                            <textarea
-                                name="target_role.description"
-                                value={formData.target_role.description}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border rounded-md"
-                                rows="3"
-                                placeholder="Detailed role description"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Persona</label>
-                            <textarea
-                                name="target_role.persona"
-                                value={formData.target_role.persona}
-                                onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border rounded-md"
-                                rows="2"
-                                placeholder="Personality and communication style"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">
-                                Constraints (one per line)
-                            </label>
-                            <textarea
-                                name="target_role.constraints"
-                                value={formData.target_role.constraints}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border rounded-md"
-                                rows="4"
-                                placeholder="Never share customer personal information&#10;Always verify identity before account changes"
-                            />
-                        </div>
-                    </div>
-                </div>
+                <Card title="Target Agent Role" style={{ marginBottom: 24 }}>
+                    <Row gutter={16}>
+                        <Col span={24}>
+                            <Form.Item
+                                label="Role Name"
+                                name="role_name"
+                                rules={[{ required: true, message: 'Please enter role name' }]}
+                            >
+                                <Input placeholder="e.g., Customer Support Agent" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item
+                                label="Description"
+                                name="role_description"
+                                rules={[{ required: true, message: 'Please enter role description' }]}
+                            >
+                                <TextArea rows={3} placeholder="Detailed role description" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item
+                                label="Persona"
+                                name="persona"
+                                rules={[{ required: true, message: 'Please enter persona' }]}
+                            >
+                                <TextArea rows={2} placeholder="Personality and communication style" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item label="Knowledge Domain" name="knowledge_domain">
+                                <Input placeholder="e.g., Customer Service, E-commerce" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <Form.Item
+                                label="Constraints (one per line)"
+                                name="constraints"
+                                rules={[{ required: true, message: 'Please enter at least one constraint' }]}
+                            >
+                                <TextArea
+                                    rows={4}
+                                    placeholder="Never share customer personal information&#10;Always verify identity before account changes"
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Card>
 
                 {/* Attack Strategies */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                    <h2 className="text-xl font-semibold mb-4">Attack Strategies</h2>
-                    <div className="grid md:grid-cols-2 gap-3">
-                        {strategies.map(strategy => (
-                            <label key={strategy.key} className="flex items-start space-x-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.attack_strategies.includes(strategy.key)}
-                                    onChange={() => toggleStrategy(strategy.key)}
-                                    className="mt-1"
-                                />
-                                <div>
-                                    <div className="font-medium">{strategy.name}</div>
-                                    <div className="text-sm text-gray-600">{strategy.description}</div>
-                                </div>
-                            </label>
-                        ))}
-                    </div>
-                </div>
+                <Card title="Attack Strategies" style={{ marginBottom: 24 }}>
+                    <Form.Item name="attack_strategies">
+                        <Checkbox.Group style={{ width: '100%' }}>
+                            <Row gutter={[16, 16]}>
+                                {strategies.map(strategy => (
+                                    <Col span={12} key={strategy.key}>
+                                        <Checkbox value={strategy.key}>
+                                            <div>
+                                                <div style={{ fontWeight: 500 }}>{strategy.name}</div>
+                                                <div style={{ fontSize: '12px', color: '#666' }}>
+                                                    {strategy.description}
+                                                </div>
+                                            </div>
+                                        </Checkbox>
+                                    </Col>
+                                ))}
+                            </Row>
+                        </Checkbox.Group>
+                    </Form.Item>
+                </Card>
 
                 {/* Configuration */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                    <h2 className="text-xl font-semibold mb-4">Configuration</h2>
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Number of Turns</label>
-                            <input
-                                type="number"
-                                name="num_turns"
-                                value={formData.num_turns}
-                                onChange={handleChange}
-                                min="1"
-                                max="100"
-                                className="w-full px-3 py-2 border rounded-md"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Temperature</label>
-                            <input
-                                type="number"
-                                name="temperature"
-                                value={formData.temperature}
-                                onChange={handleChange}
-                                min="0"
-                                max="2"
-                                step="0.1"
-                                className="w-full px-3 py-2 border rounded-md"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">LLM Provider</label>
-                            <select
-                                name="target_llm_provider"
-                                value={formData.target_llm_provider}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border rounded-md"
-                            >
-                                {models.providers.map(p => (
-                                    <option key={p.name} value={p.name}>{p.display_name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Model</label>
-                            <select
-                                name="target_model"
-                                value={formData.target_model}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border rounded-md"
-                            >
-                                {models.providers
-                                    .find(p => p.name === formData.target_llm_provider)
-                                    ?.models.map(m => (
-                                        <option key={m} value={m}>{m}</option>
+                <Card title="Configuration" style={{ marginBottom: 24 }}>
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item label="Number of Turns" name="num_turns">
+                                <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="Temperature" name="temperature">
+                                <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="LLM Provider" name="target_llm_provider">
+                                <Select onChange={setSelectedProvider}>
+                                    {models.providers.map(p => (
+                                        <Select.Option key={p.name} value={p.name}>
+                                            {p.display_name}
+                                        </Select.Option>
                                     ))}
-                            </select>
-                        </div>
-                    </div>
-                </div>
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="Model" name="target_model">
+                                <Select>
+                                    {providerModels.map(m => (
+                                        <Select.Option key={m} value={m}>
+                                            {m}
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Card>
 
                 {/* Submit */}
-                <div className="flex justify-end space-x-4">
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        className="px-6 py-2 border rounded-md text-gray-700 hover:bg-gray-50"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center"
-                    >
-                        {loading && <Loader className="animate-spin mr-2 h-4 w-4" />}
-                        Create & Run Experiment
-                    </button>
-                </div>
-            </form>
+                <Form.Item>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <Button onClick={() => navigate('/')}>
+                            Cancel
+                        </Button>
+                        <Button type="primary" htmlType="submit" loading={loading} danger>
+                            Create & Run Experiment
+                        </Button>
+                    </div>
+                </Form.Item>
+            </Form>
         </div>
     );
 }
