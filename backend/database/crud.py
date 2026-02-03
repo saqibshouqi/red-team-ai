@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import json
 
-from models.experiment import (
+from backend.models.experiment import (
     Experiment,
     ConversationTurnModel,
     Score,

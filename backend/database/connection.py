@@ -6,8 +6,8 @@ from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 import os
 
-from models.experiment import Base
-from config import settings
+from backend.models.experiment import Base
+from backend.config import settings
 
 # Create engine
 engine = create_engine(
