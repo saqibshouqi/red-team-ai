@@ -1,28 +1,112 @@
 """
 CRUD operations for database
 """
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from datetime import datetime
 import json
+from datetime import datetime
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
 
 from backend.models.experiment import (
-    Experiment,
     ConversationTurnModel,
+    Experiment,
+    ExperimentStatusEnum,
     Score,
-    ExperimentStatusEnum
 )
-from shared import ExperimentResult, ExperimentStatus
+from shared import ConversationTurn, ExperimentResult, ExperimentStatus, ScoreMetrics
+
+
+def parse_datetime(value: Optional[str]) -> Optional[datetime]:
+    """
+    Parse ISO string timestamp to datetime object
+
+    Args:
+        value: ISO string timestamp or None
+
+    Returns:
+        datetime object or None
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    if isinstance(value, str):
+        try:
+            # Try parsing ISO format
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            # Fallback to other formats if needed
+            try:
+                return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%f')
+            except ValueError:
+                try:
+                    return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
+                except ValueError:
+                    return None
+
+    return None
+
+
+def serialize_conversation(conversation: Optional[List[ConversationTurn]]) -> Optional[List[dict]]:
+    """
+    Convert conversation from Pydantic models to list of dicts for JSON storage
+
+    Args:
+        conversation: List of ConversationTurn Pydantic models
+
+    Returns:
+        List of dictionaries or None
+    """
+    if not conversation:
+        return None
+
+    return [
+        {
+            "turn_number": turn.turn_number,
+            "interrogator_message": turn.interrogator_message,
+            "target_response": turn.target_response,
+            "interrogator_strategy": turn.interrogator_strategy,
+            "response_time_ms": turn.response_time_ms,
+            "timestamp": turn.timestamp
+        }
+        for turn in conversation
+    ]
+
+
+def serialize_scores(scores: Optional[ScoreMetrics]) -> Optional[dict]:
+    """
+    Convert scores from Pydantic model to dict for JSON storage
+
+    Args:
+        scores: ScoreMetrics Pydantic model
+
+    Returns:
+        Dictionary with all score fields or None
+    """
+    if not scores:
+        return None
+
+    return {
+        "role_fidelity_score": scores.role_fidelity_score,
+        "drift_index": scores.drift_index,
+        "ethical_deviation_score": scores.ethical_deviation_score,
+        "consistency_score": scores.consistency_score,
+        "overall_score": scores.overall_score,
+        "detailed_analysis": scores.detailed_analysis,
+        "turn_by_turn_scores": scores.turn_by_turn_scores
+    }
 
 
 def create_experiment(db: Session, result: ExperimentResult) -> Experiment:
     """
     Create new experiment in database
-    
+
     Args:
         db: Database session
         result: ExperimentResult object
-        
+
     Returns:
         Created Experiment model
     """
@@ -33,25 +117,25 @@ def create_experiment(db: Session, result: ExperimentResult) -> Experiment:
         ExperimentStatus.COMPLETED: ExperimentStatusEnum.COMPLETED,
         ExperimentStatus.FAILED: ExperimentStatusEnum.FAILED
     }
-    
+
     experiment = Experiment(
         id=result.experiment_id,
         name=result.experiment_name,
         description=result.config.description,
         status=status_map[result.status],
         config=result.config.model_dump(mode='json'),
-        conversation=json.loads(result.model_dump_json())['conversation'] if result.conversation else None,
-        scores=result.scores.model_dump() if result.scores else None,
-        start_time=result.start_time,
-        end_time=result.end_time,
+        conversation=serialize_conversation(result.conversation),
+        scores=serialize_scores(result.scores),
+        start_time=parse_datetime(result.start_time),
+        end_time=parse_datetime(result.end_time),
         duration_seconds=result.duration_seconds,
         error_message=result.error_message
     )
-    
+
     db.add(experiment)
     db.commit()
     db.refresh(experiment)
-    
+
     # Create conversation turns
     if result.conversation:
         for turn in result.conversation:
@@ -62,10 +146,10 @@ def create_experiment(db: Session, result: ExperimentResult) -> Experiment:
                 target_response=turn.target_response,
                 interrogator_strategy=turn.interrogator_strategy,
                 response_time_ms=turn.response_time_ms,
-                timestamp=turn.timestamp
+                timestamp=parse_datetime(turn.timestamp) if turn.timestamp else datetime.utcnow()
             )
             db.add(turn_model)
-    
+
     # Create scores
     if result.scores:
         score_model = Score(
@@ -79,9 +163,9 @@ def create_experiment(db: Session, result: ExperimentResult) -> Experiment:
             turn_by_turn_scores=result.scores.turn_by_turn_scores
         )
         db.add(score_model)
-    
+
     db.commit()
-    
+
     return experiment
 
 
@@ -98,21 +182,21 @@ def get_experiments(
 ) -> List[Experiment]:
     """
     Get list of experiments
-    
+
     Args:
         db: Database session
         skip: Number to skip (pagination)
         limit: Maximum number to return
         status: Filter by status
-        
+
     Returns:
         List of experiments
     """
     query = db.query(Experiment)
-    
+
     if status:
         query = query.filter(Experiment.status == status)
-    
+
     return query.order_by(Experiment.created_at.desc()).offset(skip).limit(limit).all()
 
 
@@ -124,49 +208,62 @@ def update_experiment_status(
     duration: Optional[float] = None,
     error_message: Optional[str] = None
 ) -> Optional[Experiment]:
-    """Update experiment status"""
+    """
+    Update experiment status
+
+    Args:
+        db: Database session
+        experiment_id: Experiment ID
+        status: New status
+        end_time: End time (datetime object or ISO string)
+        duration: Duration in seconds
+        error_message: Error message if failed
+
+    Returns:
+        Updated experiment or None
+    """
     experiment = get_experiment(db, experiment_id)
-    
+
     if not experiment:
         return None
-    
+
     experiment.status = status
-    
+
     if end_time:
-        experiment.end_time = end_time
-    
+        experiment.end_time = parse_datetime(end_time) if isinstance(end_time, str) else end_time
+
     if duration:
         experiment.duration_seconds = duration
-    
+
     if error_message:
         experiment.error_message = error_message
-    
+
     db.commit()
     db.refresh(experiment)
-    
+
     return experiment
 
 
 def delete_experiment(db: Session, experiment_id: str) -> bool:
     """Delete experiment and related data"""
     experiment = get_experiment(db, experiment_id)
-    
+
     if not experiment:
         return False
-    
+
     # Delete related data
     db.query(ConversationTurnModel).filter(
         ConversationTurnModel.experiment_id == experiment_id
     ).delete()
-    
+
     db.query(Score).filter(
         Score.experiment_id == experiment_id
     ).delete()
-    
+
     # Delete experiment
     db.delete(experiment)
     db.commit()
-    
+
     return True
 
 
@@ -188,8 +285,8 @@ def get_conversation_turns(
 def get_experiments_count(db: Session, status: Optional[ExperimentStatusEnum] = None) -> int:
     """Get total count of experiments"""
     query = db.query(Experiment)
-    
+
     if status:
         query = query.filter(Experiment.status == status)
-    
+
     return query.count()
