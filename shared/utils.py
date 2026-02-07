@@ -2,16 +2,52 @@
 Shared utility functions
 """
 import json
+import logging
+import sys
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
-import logging
+from typing import Any, Dict, List, Optional
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+
+# Setup logging with better formatting
+def setup_logging(level: str = "INFO", log_file: Optional[str] = None):
+    """
+    Setup logging configuration
+
+    Args:
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Optional log file path
+    """
+    log_level = getattr(logging, level.upper(), logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter(
+        fmt='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Setup console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(log_level)
+
+    # Setup root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    root_logger.addHandler(console_handler)
+
+    # Setup file handler if specified
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(log_level)
+        root_logger.addHandler(file_handler)
+
+    # Prevent duplicate logs
+    root_logger.propagate = False
+
+# Initialize logging with default settings
+setup_logging()
 
 
 def generate_id() -> str:
@@ -66,5 +102,26 @@ def validate_score(score: float, min_val: float = 0.0, max_val: float = 1.0) -> 
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get configured logger"""
-    return logging.getLogger(name)
+    """
+    Get configured logger with context
+
+    Args:
+        name: Logger name (typically __name__)
+
+    Returns:
+        Configured logger instance
+    """
+    logger = logging.getLogger(name)
+
+    # Add context formatter if not already configured
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            fmt='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+    return logger
