@@ -16,6 +16,9 @@ anthropic==0.8.1
 # HTTP Client
 httpx==0.26.0
 
+# Static file serving
+aiofiles==23.2.1
+
 # Utilities
 python-dotenv==1.0.0
 python-multipart==0.0.6

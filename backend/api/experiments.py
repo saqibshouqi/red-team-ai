@@ -6,17 +6,8 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from backend.database import (
-    create_experiment,
-    delete_experiment,
-    get_db,
-    get_experiment,
-    get_experiments,
-    get_experiments_count,
-)
+from backend.database import get_db, create_experiment, get_experiment, get_experiments, delete_experiment, get_experiments_count
+from backend.database.connection import SessionLocal
 from backend.models.experiment import ExperimentStatusEnum
 from orchestrator import get_orchestrator, run_experiment
 from shared import (
@@ -321,77 +312,10 @@ def run_experiment_background(experiment_id: str, db: Session):
 
         # Reconstruct ExperimentConfig from stored config
         try:
-            config_dict = experiment.config
-            if not config_dict:
-                raise ValueError("Experiment config not found")
-
-            # Convert config dict back to ExperimentConfig Pydantic model
-            from shared import ExperimentConfig
-
-            config = ExperimentConfig(**config_dict)
-
-            # Create new experiment runner with the config
-            runner = ExperimentRunner(config)
-
-            # Run the experiment
-            result = runner.run()
-
-            # Update database with results
-            status_map = {
-                ExperimentStatus.COMPLETED: ExperimentStatusEnum.COMPLETED,
-                ExperimentStatus.FAILED: ExperimentStatusEnum.FAILED,
-                ExperimentStatus.RUNNING: ExperimentStatusEnum.RUNNING,
-                ExperimentStatus.PENDING: ExperimentStatusEnum.PENDING,
-            }
-
-            experiment.status = status_map[result.status]
-            experiment.conversation = serialize_conversation(result.conversation)
-            experiment.scores = serialize_scores(result.scores)
-            experiment.start_time = parse_datetime(result.start_time)
-            experiment.end_time = parse_datetime(result.end_time)
-            experiment.duration_seconds = result.duration_seconds
-            experiment.error_message = result.error_message
-            fresh_db.commit()
-
-            logger.info(f"Experiment {experiment_id} completed successfully")
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(
-                f"Error running experiment {experiment_id}: {error_msg}", exc_info=True
-            )
-
-            # Check if it's a rate limit error and provide helpful message
-            if (
-                "rate limit" in error_msg.lower()
-                or "429" in error_msg
-                or "rate_limit" in error_msg.lower()
-                or "tokens per day" in error_msg.lower()
-            ):
-                error_msg = (
-                    "⚠️ Rate Limit Exceeded: The LLM provider (Groq) has reached its daily token limit. "
-                    "The experiment could not complete because there are not enough tokens remaining. "
-                    "\n\nSolutions:\n"
-                    "• Wait for the rate limit to reset (check logs for exact time)\n"
-                    "• Use a different LLM provider (OpenAI, Anthropic)\n"
-                    "• Reduce experiment size (fewer turns, shorter responses)\n"
-                    "• Upgrade your Groq account tier\n\n"
-                    f"Original error: {error_msg}"
-                )
-            elif "timeout" in error_msg.lower():
-                error_msg = (
-                    "⏱️ Request Timeout: The LLM provider took too long to respond. "
-                    "Please try again later or use a different provider/model. "
-                    f"\n\nOriginal error: {error_msg}"
-                )
-
-            # Update status to failed with detailed error message
-            experiment.status = ExperimentStatusEnum.FAILED
-            experiment.error_message = error_msg
-            fresh_db.commit()
-
-    finally:
-        fresh_db.close()
-
-
-from backend.database.connection import SessionLocal
+            experiment = get_experiment(fresh_db, experiment_id)
+            if experiment:
+                experiment.status = ExperimentStatusEnum.FAILED
+                experiment.error_message = str(e)
+                fresh_db.commit()
+        finally:
+            fresh_db.close()

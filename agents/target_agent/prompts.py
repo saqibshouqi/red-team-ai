@@ -70,49 +70,16 @@ def build_target_agent_system_prompt(
 
 
 def build_context_aware_prompt(
-    system_prompt: str, conversation_history: List[Dict[str, str]]
+	system_prompt: str,
+	conversation_history: List[dict]
 ) -> str:
-    """
-    Build a context-aware prompt that includes conversation history.
-
-    This function enhances the system prompt with recent conversation context
-    to help the agent maintain consistency and awareness of previous exchanges.
-
-    Args:
-        system_prompt: Base system prompt
-        conversation_history: List of conversation turns with 'query' and 'response' keys
-
-    Returns:
-        Enhanced system prompt with conversation context
-    """
-    if not conversation_history:
-        return system_prompt
-
-    # Include recent conversation history (last 3-5 turns)
-    recent_history = (
-        conversation_history[-5:]
-        if len(conversation_history) > 5
-        else conversation_history
-    )
-
-    context_parts = [
-        system_prompt,
-        "\n" + "=" * 60,
-        "RECENT CONVERSATION CONTEXT:",
-        "=" * 60,
-    ]
-
-    for i, turn in enumerate(recent_history, 1):
-        query = turn.get("query", "")
-        response = turn.get("response", "")
-
-        context_parts.append(f"\nPrevious Exchange {i}:")
-        context_parts.append(f"User: {query}")
-        context_parts.append(f"You: {response}")
-
-    context_parts.append("\n" + "=" * 60)
-    context_parts.append(
-        "Remember to maintain consistency with your previous responses while staying true to your role and constraints."
-    )
-
-    return "\n".join(context_parts)
+	"""
+	Build a system prompt that includes conversation history for context.
+	Note: The current query is added separately as a user message.
+	"""
+	if not conversation_history:
+		return system_prompt
+	history = "\n".join([
+		f"User: {turn['query']}\nAgent: {turn['response']}" for turn in conversation_history
+	])
+	return f"{system_prompt}\n\nPrevious conversation:\n{history}"

@@ -70,26 +70,13 @@ class TurnScore(BaseModel):
 
 
 class ScoreMetrics(BaseModel):
-    role_fidelity_score: float = Field(
-        ge=0.0, le=1.0, description="Role fidelity score (0-1)"
-    )
-    drift_index: float = Field(
-        ge=0.0, le=1.0, description="Drift index (0-1, lower is better)"
-    )
-    ethical_deviation_score: float = Field(
-        ge=0.0, le=1.0, description="Ethical deviation score (0-1, lower is better)"
-    )
-    consistency_score: float = Field(
-        ge=0.0, le=1.0, description="Consistency score (0-1)"
-    )
-    overall_score: float = Field(
-        ge=0.0, le=1.0, description="Overall composite score (0-1)"
-    )
-    detailed_analysis: Optional[str] = None
-    turn_by_turn_scores: Optional[List[Dict[str, Any]]] = Field(
-        default=None, description="List of turn-by-turn score dictionaries"
-    )
-
+	role_fidelity_score: float
+	drift_index: float
+	ethical_deviation_score: float
+	consistency_score: float
+	overall_score: float
+	detailed_analysis: Optional[str] = None
+	turn_by_turn_scores: Optional[List[Any]] = None
 
 class ExperimentConfig(BaseModel):
     experiment_name: str = Field(description="Name of the experiment")
