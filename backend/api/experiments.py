@@ -6,16 +6,23 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from backend.database import get_db, create_experiment, get_experiment, get_experiments, delete_experiment, get_experiments_count
 from backend.database.connection import SessionLocal
+from backend.database.crud import serialize_conversation, serialize_scores, parse_datetime
 from backend.models.experiment import ExperimentStatusEnum
-from orchestrator import get_orchestrator, run_experiment
 from shared import (
     ExperimentConfig,
     ExperimentCreateRequest,
     ExperimentResult,
     ExperimentStatus,
+    get_logger,
 )
+from orchestrator import get_orchestrator
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -42,7 +49,7 @@ async def create_new_experiment(
         orchestrator = get_orchestrator()
         experiment_id = orchestrator.create_experiment(
             config=request.config,
-            run_immediately=False,  # We'll handle running separately
+            run_immediately=False,
         )
 
         # Create initial database record
@@ -58,11 +65,10 @@ async def create_new_experiment(
             duration_seconds=None,
         )
 
-        db_experiment = create_experiment(db, initial_result)
+        create_experiment(db, initial_result)
 
-        # If run_immediately, execute in background
         if request.run_immediately:
-            background_tasks.add_task(run_experiment_background, experiment_id, db)
+            background_tasks.add_task(run_experiment_background, experiment_id)
             return {
                 "experiment_id": experiment_id,
                 "status": "running",
@@ -86,20 +92,7 @@ async def list_experiments(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """
-    List experiments
-
-    Args:
-        skip: Number to skip (pagination)
-        limit: Maximum number to return
-        status: Filter by status
-        db: Database session
-
-    Returns:
-        List of experiments
-    """
     try:
-        # Map status string to enum
         status_enum = None
         if status:
             try:
@@ -110,7 +103,6 @@ async def list_experiments(
         experiments = get_experiments(db, skip=skip, limit=limit, status=status_enum)
         total = get_experiments_count(db, status=status_enum)
 
-        # Convert to dict
         experiments_data = []
         for exp in experiments:
             experiments_data.append(
@@ -119,15 +111,11 @@ async def list_experiments(
                     "name": exp.name,
                     "description": exp.description,
                     "status": exp.status.value,
-                    "start_time": (
-                        exp.start_time.isoformat() if exp.start_time else None
-                    ),
+                    "start_time": exp.start_time.isoformat() if exp.start_time else None,
                     "end_time": exp.end_time.isoformat() if exp.end_time else None,
                     "duration_seconds": exp.duration_seconds,
                     "created_at": exp.created_at.isoformat(),
-                    "overall_score": (
-                        exp.scores.get("overall_score") if exp.scores else None
-                    ),
+                    "overall_score": exp.scores.get("overall_score") if exp.scores else None,
                 }
             )
 
@@ -146,22 +134,11 @@ async def list_experiments(
 
 @router.get("/{experiment_id}", response_model=dict)
 async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):
-    """
-    Get experiment details
-
-    Args:
-        experiment_id: Experiment ID
-        db: Database session
-
-    Returns:
-        Experiment details
-    """
     experiment = get_experiment(db, experiment_id)
 
     if not experiment:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
-    # Build response
     return {
         "id": experiment.id,
         "name": experiment.name,
@@ -170,9 +147,7 @@ async def get_experiment_details(experiment_id: str, db: Session = Depends(get_d
         "config": experiment.config,
         "conversation": experiment.conversation,
         "scores": experiment.scores,
-        "start_time": (
-            experiment.start_time.isoformat() if experiment.start_time else None
-        ),
+        "start_time": experiment.start_time.isoformat() if experiment.start_time else None,
         "end_time": experiment.end_time.isoformat() if experiment.end_time else None,
         "duration_seconds": experiment.duration_seconds,
         "error_message": experiment.error_message,
@@ -182,23 +157,10 @@ async def get_experiment_details(experiment_id: str, db: Session = Depends(get_d
 
 @router.post("/{experiment_id}/run", response_model=dict)
 async def run_existing_experiment(
-    experiment_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+    experiment_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
 ):
-    """
-    Run or rerun an existing experiment.
-
-    This endpoint can be used to:
-    - Run a pending experiment for the first time
-    - Rerun a completed or failed experiment with the same configuration
-
-    Args:
-        experiment_id: Experiment ID
-        background_tasks: FastAPI background tasks
-        db: Database session
-
-    Returns:
-        Status message
-    """
     experiment = get_experiment(db, experiment_id)
 
     if not experiment:
@@ -207,28 +169,17 @@ async def run_existing_experiment(
     if experiment.status == ExperimentStatusEnum.RUNNING:
         raise HTTPException(status_code=400, detail="Experiment already running")
 
-    # Run in background (supports rerunning from database)
-    background_tasks.add_task(run_experiment_background, experiment_id, db)
+    background_tasks.add_task(run_experiment_background, experiment_id)
 
     return {
         "experiment_id": experiment_id,
         "status": "running",
-        "message": "Experiment started. Results will be updated when complete.",
+        "message": "Experiment started",
     }
 
 
 @router.delete("/{experiment_id}", response_model=dict)
 async def delete_experiment_endpoint(experiment_id: str, db: Session = Depends(get_db)):
-    """
-    Delete an experiment
-
-    Args:
-        experiment_id: Experiment ID
-        db: Database session
-
-    Returns:
-        Success message
-    """
     success = delete_experiment(db, experiment_id)
 
     if not success:
@@ -239,19 +190,10 @@ async def delete_experiment_endpoint(experiment_id: str, db: Session = Depends(g
 
 @router.get("/{experiment_id}/export", response_model=dict)
 async def export_experiment(
-    experiment_id: str, format: str = "json", db: Session = Depends(get_db)
+    experiment_id: str,
+    format: str = "json",
+    db: Session = Depends(get_db),
 ):
-    """
-    Export experiment data
-
-    Args:
-        experiment_id: Experiment ID
-        format: Export format (json or csv)
-        db: Database session
-
-    Returns:
-        Exported data
-    """
     experiment = get_experiment(db, experiment_id)
 
     if not experiment:
@@ -266,56 +208,69 @@ async def export_experiment(
             "config": experiment.config,
             "conversation": experiment.conversation,
             "scores": experiment.scores,
-            "start_time": (
-                experiment.start_time.isoformat() if experiment.start_time else None
-            ),
-            "end_time": (
-                experiment.end_time.isoformat() if experiment.end_time else None
-            ),
+            "start_time": experiment.start_time.isoformat() if experiment.start_time else None,
+            "end_time": experiment.end_time.isoformat() if experiment.end_time else None,
             "duration_seconds": experiment.duration_seconds,
             "created_at": experiment.created_at.isoformat(),
         }
     else:
-        raise HTTPException(
-            status_code=400, detail="Only JSON format supported currently"
-        )
+        raise HTTPException(status_code=400, detail="Only JSON format supported currently")
 
 
-def run_experiment_background(experiment_id: str, db: Session):
+def run_experiment_background(experiment_id: str):
     """
     Run experiment in background and update database.
-    Supports rerunning experiments by loading config from database.
 
     Args:
         experiment_id: Experiment ID
-        db: Database session
     """
     fresh_db = SessionLocal()
     try:
-        from backend.database import parse_datetime
-        from backend.database.crud import serialize_conversation, serialize_scores
-        from orchestrator.experiment_runner import ExperimentRunner
-
-        # Load experiment from database
-        from shared import get_logger
-
-        logger = get_logger(__name__)
-
         experiment = get_experiment(fresh_db, experiment_id)
         if not experiment:
             logger.error(f"Experiment {experiment_id} not found in database")
             return
 
-        # Update status to running
+        # Mark as running
         experiment.status = ExperimentStatusEnum.RUNNING
+        experiment.start_time = datetime.utcnow()
         fresh_db.commit()
 
-        # Reconstruct ExperimentConfig from stored config
+        # Reconstruct ExperimentConfig from stored JSON
+        config = ExperimentConfig(**experiment.config)
+
+        # Run via orchestrator
+        orchestrator = get_orchestrator()
+        orchestrator.create_experiment(config=config, run_immediately=False)
+        result = orchestrator.run_experiment(experiment_id)
+
+        # Save results back to DB
+        experiment = get_experiment(fresh_db, experiment_id)
+        if experiment:
+            status_map = {
+                ExperimentStatus.COMPLETED: ExperimentStatusEnum.COMPLETED,
+                ExperimentStatus.FAILED: ExperimentStatusEnum.FAILED,
+                ExperimentStatus.RUNNING: ExperimentStatusEnum.RUNNING,
+                ExperimentStatus.PENDING: ExperimentStatusEnum.PENDING,
+            }
+            experiment.status = status_map.get(result.status, ExperimentStatusEnum.FAILED)
+            experiment.conversation = serialize_conversation(result.conversation)
+            experiment.scores = serialize_scores(result.scores)
+            experiment.start_time = parse_datetime(result.start_time) if result.start_time else experiment.start_time
+            experiment.end_time = parse_datetime(result.end_time) if result.end_time else datetime.utcnow()
+            experiment.duration_seconds = result.duration_seconds
+            experiment.error_message = result.error_message
+            fresh_db.commit()
+
+    except Exception as e:
+        logger.error(f"Background experiment failed: {e}")
         try:
             experiment = get_experiment(fresh_db, experiment_id)
             if experiment:
                 experiment.status = ExperimentStatusEnum.FAILED
                 experiment.error_message = str(e)
                 fresh_db.commit()
-        finally:
-            fresh_db.close()
+        except Exception:
+            pass
+    finally:
+        fresh_db.close()
