@@ -49,7 +49,7 @@ class ScoreMetrics(BaseModel):
 	consistency_score: float
 	overall_score: float
 	detailed_analysis: Optional[str] = None
-	turn_by_turn_scores: Optional[List[float]] = None
+	turn_by_turn_scores: Optional[List[Any]] = None
 
 class ExperimentConfig(BaseModel):
 	experiment_name: str

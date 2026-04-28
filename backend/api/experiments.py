@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 
 from backend.database import get_db, create_experiment, get_experiment, get_experiments, delete_experiment, get_experiments_count
+from backend.database.connection import SessionLocal
 from backend.models.experiment import ExperimentStatusEnum
 from shared import ExperimentConfig, ExperimentCreateRequest, ExperimentResult, ExperimentStatus
 from orchestrator import run_experiment, get_orchestrator
@@ -319,6 +320,3 @@ def run_experiment_background(experiment_id: str, db: Session):
                 fresh_db.commit()
         finally:
             fresh_db.close()
-
-
-from backend.database.connection import SessionLocal

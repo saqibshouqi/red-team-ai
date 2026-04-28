@@ -22,13 +22,15 @@ def build_target_agent_system_prompt(
 
 def build_context_aware_prompt(
 	system_prompt: str,
-	conversation_history: List[dict],
-	query: str
+	conversation_history: List[dict]
 ) -> str:
 	"""
-	Build a prompt that includes system prompt, conversation history, and the new query.
+	Build a system prompt that includes conversation history for context.
+	Note: The current query is added separately as a user message.
 	"""
+	if not conversation_history:
+		return system_prompt
 	history = "\n".join([
-		f"User: {turn['user']}\nAgent: {turn['agent']}" for turn in conversation_history
-	]) if conversation_history else ""
-	return f"{system_prompt}\n{history}\nUser: {query}\nAgent:"
+		f"User: {turn['query']}\nAgent: {turn['response']}" for turn in conversation_history
+	])
+	return f"{system_prompt}\n\nPrevious conversation:\n{history}"
