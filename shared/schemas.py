@@ -1,46 +1,73 @@
 # Core schemas and enums for Red Team AI
 from enum import Enum
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
+
 class LLMProvider(str, Enum):
-	GROQ = "groq"
-	OPENAI = "openai"
-	ANTHROPIC = "anthropic"
+    GROQ = "groq"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
 
 class AttackStrategy(str, Enum):
-	ROLE_DRIFT = "role_drift"
-	ETHICAL_PROBING = "ethical_probing"
-	CONTRADICTION = "contradiction"
-	CONFUSION = "confusion"
-	AUTHORITY_CHALLENGE = "authority_challenge"
-	EMOTIONAL_MANIPULATION = "emotional_manipulation"
+    ROLE_DRIFT = "role_drift"
+    ETHICAL_PROBING = "ethical_probing"
+    CONTRADICTION = "contradiction"
+    CONFUSION = "confusion"
+    AUTHORITY_CHALLENGE = "authority_challenge"
+    EMOTIONAL_MANIPULATION = "emotional_manipulation"
+
 
 class ExperimentStatus(str, Enum):
-	PENDING = "pending"
-	RUNNING = "running"
-	COMPLETED = "completed"
-	FAILED = "failed"
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
 
 class AgentRole(BaseModel):
-	name: str
-	description: str
-	persona: Optional[str] = None
-	constraints: List[str] = []
-	knowledge_domain: Optional[str] = None
+    name: str = Field(description="Name of the role (e.g., 'Customer Support Agent')")
+    description: str = Field(description="Detailed description of the role")
+    persona: Optional[str] = Field(
+        default=None, description="Personality traits and behavioral characteristics"
+    )
+    constraints: List[str] = Field(
+        default_factory=list, description="List of constraints and boundaries"
+    )
+    knowledge_domain: Optional[str] = Field(
+        default=None, description="Domain of expertise/knowledge"
+    )
+
 
 class Message(BaseModel):
-	sender: str
-	content: str
-	timestamp: Optional[str] = None
+    sender: str
+    content: str
+    timestamp: Optional[str] = None
+
 
 class ConversationTurn(BaseModel):
-	turn_number: int
-	interrogator_message: str
-	target_response: str
-	interrogator_strategy: str
-	response_time_ms: Optional[float] = None
-	timestamp: Optional[Any] = None
+    turn_number: int = Field(ge=1, description="Turn number (1-indexed)")
+    interrogator_message: str = Field(description="Interrogator's query/message")
+    target_response: str = Field(description="Target agent's response")
+    interrogator_strategy: str = Field(description="Attack strategy used")
+    response_time_ms: Optional[float] = Field(
+        default=None, ge=0, description="Response time in milliseconds"
+    )
+    timestamp: Optional[str] = Field(
+        default=None, description="ISO timestamp of the turn"
+    )
+
+
+class TurnScore(BaseModel):
+    """Score for a single conversation turn"""
+
+    turn: int
+    role_fidelity: float
+    ethical_deviation: float
+    overall: float
+
 
 class ScoreMetrics(BaseModel):
 	role_fidelity_score: float
@@ -49,40 +76,78 @@ class ScoreMetrics(BaseModel):
 	consistency_score: float
 	overall_score: float
 	detailed_analysis: Optional[str] = None
-	turn_by_turn_scores: Optional[List[float]] = None
+	turn_by_turn_scores: Optional[List[Any]] = None
 
 class ExperimentConfig(BaseModel):
-	experiment_name: str
-	description: Optional[str] = None
-	target_role: AgentRole
-	attack_strategies: List[AttackStrategy] = [AttackStrategy.ROLE_DRIFT]
-	target_llm_provider: LLMProvider = LLMProvider.GROQ
-	target_model: Optional[str] = None
-	num_turns: int = 10
-	temperature: float = 0.7
-	max_tokens: int = 1024
-	use_llm_judge: bool = False
-	judge_llm_provider: Optional[LLMProvider] = None
-	judge_model: Optional[str] = None
-	interrogator_llm_provider: Optional[LLMProvider] = None
-	interrogator_model: Optional[str] = None
+    experiment_name: str = Field(description="Name of the experiment")
+    description: Optional[str] = Field(
+        default=None, description="Optional experiment description"
+    )
+    target_role: AgentRole = Field(description="Target agent role definition")
+    attack_strategies: List[AttackStrategy] = Field(
+        default=[AttackStrategy.ROLE_DRIFT],
+        description="List of attack strategies to use",
+    )
+    target_llm_provider: LLMProvider = Field(
+        default=LLMProvider.GROQ, description="LLM provider for target agent"
+    )
+    target_model: Optional[str] = Field(
+        default=None, description="Model name for target agent"
+    )
+    num_turns: int = Field(
+        default=10, ge=1, le=100, description="Number of conversation turns"
+    )
+    temperature: float = Field(
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
+    )
+    max_tokens: int = Field(
+        default=1024, ge=1, le=4096, description="Maximum tokens per response"
+    )
+    use_llm_judge: bool = Field(
+        default=False, description="Whether to use LLM-as-judge"
+    )
+    judge_llm_provider: Optional[LLMProvider] = Field(
+        default=None, description="LLM provider for judge"
+    )
+    judge_model: Optional[str] = Field(default=None, description="Model name for judge")
+    interrogator_llm_provider: Optional[LLMProvider] = Field(
+        default=None, description="LLM provider for interrogator"
+    )
+    interrogator_model: Optional[str] = Field(
+        default=None, description="Model name for interrogator"
+    )
+
 
 class ExperimentResult(BaseModel):
-	experiment_id: str
-	experiment_name: str
-	config: ExperimentConfig
-	status: ExperimentStatus
-	conversation: Optional[List[ConversationTurn]] = None
-	scores: Optional[ScoreMetrics] = None
-	start_time: Optional[Any] = None
-	end_time: Optional[Any] = None
-	duration_seconds: Optional[float] = None
-	error_message: Optional[str] = None
+    experiment_id: str = Field(description="Unique experiment identifier")
+    experiment_name: str = Field(description="Name of the experiment")
+    config: ExperimentConfig = Field(description="Experiment configuration")
+    status: ExperimentStatus = Field(description="Current experiment status")
+    conversation: Optional[List[ConversationTurn]] = Field(
+        default=None, description="Conversation turns"
+    )
+    scores: Optional[ScoreMetrics] = Field(
+        default=None, description="Evaluation scores"
+    )
+    start_time: Optional[str] = Field(
+        default=None, description="ISO timestamp of experiment start"
+    )
+    end_time: Optional[str] = Field(
+        default=None, description="ISO timestamp of experiment end"
+    )
+    duration_seconds: Optional[float] = Field(
+        default=None, ge=0, description="Experiment duration in seconds"
+    )
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if experiment failed"
+    )
+
 
 class ExperimentCreateRequest(BaseModel):
-	config: ExperimentConfig
-	run_immediately: bool = True
+    config: ExperimentConfig
+    run_immediately: bool = True
+
 
 class ExperimentListResponse(BaseModel):
-	experiments: List[ExperimentResult]
-	total: int
+    experiments: List[ExperimentResult]
+    total: int

@@ -1,19 +1,23 @@
 """
 Database connection and session management
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from typing import Generator
-import os
 
-from backend.models.experiment import Base
+import os
+from typing import Generator
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
 from backend.config import settings
+from backend.models.experiment import Base
 
 # Create engine
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
-    echo=settings.debug
+    connect_args=(
+        {"check_same_thread": False} if "sqlite" in settings.database_url else {}
+    ),
+    echo=settings.debug,
 )
 
 # Create session factory
@@ -36,7 +40,7 @@ def reset_db():
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency for getting database session
-    
+
     Yields:
         Database session
     """
@@ -50,7 +54,7 @@ def get_db() -> Generator[Session, None, None]:
 def get_db_session() -> Session:
     """
     Get a database session (for non-FastAPI contexts)
-    
+
     Returns:
         Database session (must be closed manually)
     """

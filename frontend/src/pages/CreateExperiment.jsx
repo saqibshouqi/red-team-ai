@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Form, Input, InputNumber, Select, Checkbox, Button, Row, Col, message, Spin } from 'antd';
+import { Card, Form, Input, InputNumber, Select, Checkbox, Button, Row, Col, message, Spin, Typography, Space } from 'antd';
 import { experimentsAPI, agentsAPI } from '../api/client';
 
 const { TextArea } = Input;
+const { Title, Text } = Typography;
 
 function CreateExperiment() {
     const navigate = useNavigate();
@@ -71,6 +72,9 @@ function CreateExperiment() {
         return (
             <div style={{ textAlign: 'center', padding: '100px' }}>
                 <Spin size="large" />
+                <div style={{ marginTop: 16 }}>
+                    <Text type="secondary">Loading experiment configuration...</Text>
+                </div>
             </div>
         );
     }
@@ -78,10 +82,8 @@ function CreateExperiment() {
     const providerModels = models.providers.find(p => p.name === selectedProvider)?.models || [];
 
     return (
-        <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>
-                Create New Experiment
-            </h1>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Title level={2} style={{ marginBottom: 0 }}>Create New Experiment</Title>
 
             <Form
                 form={form}
@@ -158,7 +160,7 @@ function CreateExperiment() {
                             >
                                 <TextArea
                                     rows={4}
-                                    placeholder="Never share customer personal information&#10;Always verify identity before account changes"
+                                    placeholder="Never share customer personal information&#10;Always verify identity before account changes&#10;Do not make promises about product availability"
                                 />
                             </Form.Item>
                         </Col>
@@ -171,14 +173,14 @@ function CreateExperiment() {
                         <Checkbox.Group style={{ width: '100%' }}>
                             <Row gutter={[16, 16]}>
                                 {strategies.map(strategy => (
-                                    <Col span={12} key={strategy.key}>
+                                    <Col xs={24} sm={24} md={12} key={strategy.key}>
                                         <Checkbox value={strategy.key}>
-                                            <div>
-                                                <div style={{ fontWeight: 500 }}>{strategy.name}</div>
-                                                <div style={{ fontSize: '12px', color: '#666' }}>
+                                            <Space direction="vertical" size={4}>
+                                                <Text strong>{strategy.name}</Text>
+                                                <Text type="secondary" style={{ fontSize: '12px' }}>
                                                     {strategy.description}
-                                                </div>
-                                            </div>
+                                                </Text>
+                                            </Space>
                                         </Checkbox>
                                     </Col>
                                 ))}
@@ -190,17 +192,25 @@ function CreateExperiment() {
                 {/* Configuration */}
                 <Card title="Configuration" style={{ marginBottom: 24 }}>
                     <Row gutter={16}>
-                        <Col span={12}>
-                            <Form.Item label="Number of Turns" name="num_turns">
+                        <Col xs={24} sm={24} md={12}>
+                            <Form.Item
+                                label="Number of Turns"
+                                name="num_turns"
+                                tooltip="Number of conversation turns between interrogator and target agent"
+                            >
                                 <InputNumber min={1} max={100} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>
-                        <Col span={12}>
-                            <Form.Item label="Temperature" name="temperature">
+                        <Col xs={24} sm={24} md={12}>
+                            <Form.Item
+                                label="Temperature"
+                                name="temperature"
+                                tooltip="Controls randomness in model responses (0.0 = deterministic, 2.0 = very creative)"
+                            >
                                 <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>
-                        <Col span={12}>
+                        <Col xs={24} sm={24} md={12}>
                             <Form.Item label="LLM Provider" name="target_llm_provider">
                                 <Select onChange={setSelectedProvider}>
                                     {models.providers.map(p => (
@@ -211,7 +221,7 @@ function CreateExperiment() {
                                 </Select>
                             </Form.Item>
                         </Col>
-                        <Col span={12}>
+                        <Col xs={24} sm={24} md={12}>
                             <Form.Item label="Model" name="target_model">
                                 <Select>
                                     {providerModels.map(m => (
@@ -227,17 +237,17 @@ function CreateExperiment() {
 
                 {/* Submit */}
                 <Form.Item>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
                         <Button onClick={() => navigate('/')}>
                             Cancel
                         </Button>
-                        <Button type="primary" htmlType="submit" loading={loading} danger>
+                        <Button type="primary" htmlType="submit" loading={loading} danger size="large">
                             Create & Run Experiment
                         </Button>
-                    </div>
+                    </Space>
                 </Form.Item>
             </Form>
-        </div>
+        </Space>
     );
 }
 

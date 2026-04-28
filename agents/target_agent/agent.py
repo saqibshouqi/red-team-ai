@@ -95,22 +95,17 @@ class TargetAgent:
     
     def _build_messages(self, query: str) -> List[Dict[str, str]]:
         """Build message list for LLM"""
-        messages = []
-        
-        # Add system prompt
+        messages = [{"role": "system", "content": self.system_prompt}]
+
+        # Replay conversation history as proper chat turns
         if self.use_context and self.conversation_history:
-            # Include recent conversation context
-            enhanced_prompt = build_context_aware_prompt(
-                self.system_prompt,
-                self.conversation_history
-            )
-            messages.append({"role": "system", "content": enhanced_prompt})
-        else:
-            messages.append({"role": "system", "content": self.system_prompt})
-        
+            for turn in self.conversation_history:
+                messages.append({"role": "user", "content": turn["query"]})
+                messages.append({"role": "assistant", "content": turn["response"]})
+
         # Add current query
         messages.append({"role": "user", "content": query})
-        
+
         return messages
     
     def get_role_summary(self) -> Dict:

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Card, Tag, Button, Space, message, Spin } from 'antd';
-import { EyeOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Table, Card, Tag, Button, Space, message, Spin, Typography, Empty, Popconfirm } from 'antd';
+import { EyeOutlined, DeleteOutlined, ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { experimentsAPI } from '../api/client';
+
+const { Title, Text } = Typography;
 
 function ExperimentsList() {
     const navigate = useNavigate();
@@ -31,7 +33,7 @@ function ExperimentsList() {
     const handleDelete = async (id) => {
         try {
             await experimentsAPI.delete(id);
-            message.success('Experiment deleted');
+            message.success('Experiment deleted successfully');
             loadExperiments();
         } catch (error) {
             message.error('Failed to delete experiment');
@@ -53,8 +55,13 @@ function ExperimentsList() {
             title: 'Name',
             dataIndex: 'name',
             key: 'name',
+            ellipsis: true,
             render: (text, record) => (
-                <Button type="link" onClick={() => navigate(`/experiments/${record.id}`)}>
+                <Button
+                    type="link"
+                    onClick={() => navigate(`/experiments/${record.id}`)}
+                    style={{ padding: 0 }}
+                >
                     {text}
                 </Button>
             )
@@ -63,6 +70,7 @@ function ExperimentsList() {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
+            width: 120,
             render: (status) => (
                 <Tag color={getStatusColor(status)}>{status.toUpperCase()}</Tag>
             )
@@ -71,74 +79,139 @@ function ExperimentsList() {
             title: 'Overall Score',
             dataIndex: 'overall_score',
             key: 'overall_score',
-            render: (score) => score !== null ? score.toFixed(3) : '-'
+            width: 130,
+            render: (score) => {
+                if (score === null) return <Text type="secondary">-</Text>;
+                const color = score >= 0.7 ? '#52c41a' : score >= 0.5 ? '#faad14' : '#ff4d4f';
+                return <Text strong style={{ color }}>{score.toFixed(3)}</Text>;
+            }
         },
         {
             title: 'Duration',
             dataIndex: 'duration_seconds',
             key: 'duration_seconds',
-            render: (duration) => duration ? `${duration.toFixed(1)}s` : '-'
+            width: 120,
+            render: (duration) => duration ? (
+                <Text>{duration.toFixed(1)}s</Text>
+            ) : (
+                <Text type="secondary">-</Text>
+            )
         },
         {
             title: 'Created',
             dataIndex: 'created_at',
             key: 'created_at',
-            render: (date) => new Date(date).toLocaleString()
+            width: 180,
+            render: (date) => (
+                <Text type="secondary">{new Date(date).toLocaleString()}</Text>
+            )
         },
         {
             title: 'Actions',
             key: 'actions',
+            width: 180,
+            fixed: 'right',
             render: (_, record) => (
                 <Space>
                     <Button
                         type="primary"
                         icon={<EyeOutlined />}
                         onClick={() => navigate(`/experiments/${record.id}`)}
+                        size="small"
                     >
                         View
                     </Button>
-                    <Button
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(record.id)}
+                    <Popconfirm
+                        title="Delete experiment"
+                        description="Are you sure you want to delete this experiment?"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="Yes"
+                        cancelText="No"
+                        okButtonProps={{ danger: true }}
                     >
-                        Delete
-                    </Button>
+                        <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            size="small"
+                        >
+                            Delete
+                        </Button>
+                    </Popconfirm>
                 </Space>
             )
         }
     ];
 
     return (
-        <div>
-            <Card
-                title={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Experiments ({total})</span>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Card>
+                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <Title level={2} style={{ margin: 0 }}>
+                        Experiments
+                        {total > 0 && (
+                            <Text type="secondary" style={{ fontSize: '18px', fontWeight: 'normal', marginLeft: 8 }}>
+                                ({total})
+                            </Text>
+                        )}
+                    </Title>
+                    <Space>
                         <Button
-                            type="primary"
                             icon={<ReloadOutlined />}
                             onClick={loadExperiments}
+                            loading={loading}
                         >
                             Refresh
                         </Button>
-                    </div>
-                }
-            >
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => navigate('/create')}
+                        >
+                            Create Experiment
+                        </Button>
+                    </Space>
+                </Space>
+            </Card>
+
+            <Card>
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '50px' }}>
                         <Spin size="large" />
+                        <div style={{ marginTop: 16 }}>
+                            <Text type="secondary">Loading experiments...</Text>
+                        </div>
                     </div>
+                ) : experiments.length === 0 ? (
+                    <Empty
+                        description={
+                            <Space direction="vertical" size="small">
+                                <Text type="secondary">No experiments found</Text>
+                                <Button
+                                    type="primary"
+                                    icon={<PlusOutlined />}
+                                    onClick={() => navigate('/create')}
+                                >
+                                    Create Your First Experiment
+                                </Button>
+                            </Space>
+                        }
+                    />
                 ) : (
                     <Table
                         columns={columns}
                         dataSource={experiments}
                         rowKey="id"
-                        pagination={{ pageSize: 10 }}
+                        pagination={{
+                            pageSize: 10,
+                            showSizeChanger: true,
+                            showTotal: (total) => `Total ${total} experiments`,
+                            pageSizeOptions: ['10', '20', '50', '100']
+                        }}
+                        scroll={{ x: 1000 }}
                     />
                 )}
             </Card>
-        </div>
+        </Space>
     );
 }
 

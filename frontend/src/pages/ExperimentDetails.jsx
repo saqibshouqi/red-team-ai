@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Descriptions, Tag, Timeline, Statistic, Row, Col, Button, Spin, message, Tabs } from 'antd';
-import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { experimentsAPI } from '../api/client';
 
@@ -22,7 +22,7 @@ function ExperimentDetails() {
             setExperiment(data);
         } catch (error) {
             message.error('Failed to load experiment');
-            console.error(error);
+            console.error('Error loading experiment:', error);
         } finally {
             setLoading(false);
         }
@@ -40,6 +40,20 @@ function ExperimentDetails() {
             message.success('Exported successfully');
         } catch (error) {
             message.error('Failed to export');
+        }
+    };
+
+    const handleRerun = async () => {
+        try {
+            message.loading({ content: 'Rerunning experiment...', key: 'rerun' });
+            await experimentsAPI.run(id);
+            message.success({ content: 'Experiment rerun started. Results will be updated when complete.', key: 'rerun' });
+            // Reload experiment data after a short delay
+            setTimeout(() => {
+                loadExperiment();
+            }, 2000);
+        } catch (error) {
+            message.error({ content: error.response?.data?.detail || 'Failed to rerun experiment', key: 'rerun' });
         }
     };
 
@@ -113,6 +127,13 @@ function ExperimentDetails() {
                         <Descriptions.Item label="Created">
                             {new Date(experiment.created_at).toLocaleString()}
                         </Descriptions.Item>
+                        {experiment.error_message && (
+                            <Descriptions.Item label="Error" span={2}>
+                                <div style={{ color: '#cf1322', whiteSpace: 'pre-wrap' }}>
+                                    {experiment.error_message}
+                                </div>
+                            </Descriptions.Item>
+                        )}
                     </Descriptions>
 
                     {experiment.scores && (
@@ -241,19 +262,32 @@ function ExperimentDetails() {
         }
     ];
 
+    const canRerun = experiment.status === 'completed' || experiment.status === 'failed';
+
     return (
         <div>
             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
                 <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/experiments')}>
                     Back to Experiments
                 </Button>
-                <Button
-                    type="primary"
-                    icon={<DownloadOutlined />}
-                    onClick={handleExport}
-                >
-                    Export JSON
-                </Button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {canRerun && (
+                        <Button
+                            icon={<ReloadOutlined />}
+                            onClick={handleRerun}
+                            disabled={experiment.status === 'running'}
+                        >
+                            Rerun Experiment
+                        </Button>
+                    )}
+                    <Button
+                        type="primary"
+                        icon={<DownloadOutlined />}
+                        onClick={handleExport}
+                    >
+                        Export JSON
+                    </Button>
+                </div>
             </div>
 
             <Tabs items={tabItems} defaultActiveKey="overview" />

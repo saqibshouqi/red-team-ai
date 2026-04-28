@@ -257,10 +257,13 @@ from shared import LLMClient
 class MyAgent:
     def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
-    
-    def process(self, input_data):
-        # Your logic here
-        return output
+
+    def process(self, input_data: str) -> str:
+        messages = [
+            {"role": "system", "content": "Your system prompt here."},
+            {"role": "user", "content": input_data}
+        ]
+        return self.llm_client.generate(messages=messages)
 ```
 
 ### Adding a New Metric
@@ -281,6 +284,7 @@ def calculate_my_metric(responses):
 STRATEGIES["my_strategy"] = {
     "name": "My Strategy",
     "description": "What it does",
+    "prompt": "One-line goal that describes what the interrogator should try to achieve.",
     "tactics": [
         "Tactic 1",
         "Tactic 2"
@@ -346,7 +350,7 @@ For questions or collaboration:
 ## 🗺️ Roadmap
 
 - [ ] Advanced metrics (semantic similarity, embedding-based)
-- [ ] LLM-as-judge evaluation mode
+- [x] LLM-as-judge evaluation mode
 - [ ] Multi-agent scenarios
 - [ ] Real-time streaming
 - [ ] Cloud deployment templates
