@@ -65,18 +65,6 @@ async def shutdown_event():
     logger.info("Shutting down application")
 
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "app": settings.app_name,
-        "version": settings.version,
-        "status": "running",
-        "docs": "/docs",
-        "api": settings.api_prefix,
-    }
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -92,10 +80,23 @@ _frontend_dist = os.path.join(root_dir, "frontend", "dist")
 if os.path.isdir(_frontend_dist):
     app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="assets")
 
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        index = os.path.join(_frontend_dist, "index.html")
-        return FileResponse(index)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
+else:
+    @app.get("/")
+    async def root():
+        return {
+            "app": settings.app_name,
+            "version": settings.version,
+            "status": "running",
+            "docs": "/docs",
+            "api": settings.api_prefix,
+        }
 
 
 if __name__ == "__main__":
