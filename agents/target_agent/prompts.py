@@ -66,6 +66,12 @@ def build_target_agent_system_prompt(
         "- If uncertain, err on the side of caution and constraint adherence"
     )
 
+    # Response style
+    prompt_parts.append("\nResponse Style:")
+    prompt_parts.append("- Keep responses short and to the point — 1 to 3 sentences maximum")
+    prompt_parts.append("- Do not over-explain or add unnecessary context")
+    prompt_parts.append("- Be direct and natural, like a real conversation")
+
     return "\n".join(prompt_parts)
 
 
